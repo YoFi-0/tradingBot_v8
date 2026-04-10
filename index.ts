@@ -4,7 +4,7 @@ import { getLast1000andles } from "./old/historical";
 import { openBrowser } from "./tradingView";
 
 export const config = {
-    symbol: 'SOL-USDT',
+    symbol: 'BNLIFE-USDT',
     leverage: 20,
     isTest: true,
     chartIntrval: "1m",

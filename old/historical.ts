@@ -23,14 +23,15 @@ export async function getLast1000andles(interval:"1m" | "15m" | "1h"): Promise<a
             params: {
                 symbol: symbol,
                 interval: interval,
-                limit: 1000
+                limit: 1000,
+                endTime: Date.now()
             }
         });
 
         // BingX standard response format wraps data in a "code" and "data" object
         if (response.data && response.data.code === 0) {
             const candles = response.data.data;
-            const formattedCandles = candles.map(formatCandleData);
+            const formattedCandles = candles.map(formatCandleData).reverse();
             return formattedCandles;
         } else {
             throw new Error(`API Error: ${JSON.stringify(response.data)}`);

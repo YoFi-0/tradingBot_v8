@@ -16,7 +16,7 @@ export const algo = async () => {
             }
             const historicalCandles = await getLast1000andles(config.chartIntrval as "1m" | "15m" | "1h");
             const todayCandles = historicalCandles
-            
+            const lastClose = historicalCandles[historicalCandles.length - 1].close;            
             const currentTrend = EMA.getDualEmaTrend(historicalCandles, 50, 200);
             if (currentTrend !== 'Bullish') {
                 return;
@@ -25,15 +25,11 @@ export const algo = async () => {
             const vwapPrice = VWAP.getCurrentVwap(todayCandles);
             const currentAtr = ATR.calculateAtr(historicalCandles, 14);
 
-            // --- التعديل الجوهري هنا ---
-            // نضع سعر الدخول تحت الـ VWAP بنسبة من الـ ATR لاصطياد الـ Sweep
             const sweepIntensity = config.sweepIntensity;
             const sweepEntryPrice = vwapPrice - (currentAtr * sweepIntensity); 
             
-            // فحص إذا كان السعر الحالي قريب من "منطقة الاصطياد" وليس الـ VWAP نفسه
             const preparationTolerance = 0.005; // 0.5%
-            const lastClose = historicalCandles[historicalCandles.length - 1].close;
-
+           
             const distanceToEntry = Math.abs(lastClose - sweepEntryPrice) / sweepEntryPrice;
             const isNearEntry = distanceToEntry <= preparationTolerance;
             
@@ -41,8 +37,6 @@ export const algo = async () => {
 
             if (isNearEntry && isMomentumReady) {
                 
-                // حساب SL و TP بناءً على سعر الدخول المنخفض الجديد
-                // نزيد معامل الـ SL ليكون أبعد عن منطقة التلاعب
                 const tradeLevels = RISK.calculateTradeLevels(
                     sweepEntryPrice, 
                     currentAtr, 
@@ -72,6 +66,6 @@ export const algo = async () => {
     // تشغيل كل دقيقة بشكل آمن
     setInterval(async () => {
         await run();
-    }, 1000 * 60);
+    }, 1000 * 30);
 
 }
