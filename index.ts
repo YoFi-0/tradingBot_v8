@@ -1,13 +1,14 @@
 import { algo } from "./algo";
-import { hasActiveTrade, setLavrage, testApiKeys } from "./bingx";
+import { hasActiveTrade, order, orderCustom, setLavrage, testApiKeys } from "./bingx";
 import { getLast1000andles } from "./old/historical";
-import { getOrderPrice, getTrend } from "./old/math";
 import { openBrowser } from "./tradingView";
 
 export const config = {
     symbol: 'SOL-USDT',
     leverage: 20,
     isTest: true,
+    chartIntrval: "1m",
+    sweepIntensity:0.5,
     usdtAmount: 50,
 }
 
@@ -15,8 +16,9 @@ export const codeConfig = {
     urlTradingViewUserCode:"HlksI0LD"
 }
 
-const readeConfig = () => {
+const readeConfig = async () => {
     console.log("");
+    await testApiKeys();
     console.log("symbol:", config.symbol);
     console.log("leverage:", config.leverage);
     console.log("isTest:", config.isTest ? "ON 🧪" : "OFF 🔥");
@@ -43,6 +45,8 @@ const readeConfig = () => {
 // }
 
 const main = async () => {
-    await openBrowser()
+    await readeConfig();
+    await setLavrage();
+    await algo();
 }
 main();

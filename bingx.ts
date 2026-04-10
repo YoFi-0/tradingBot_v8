@@ -7,33 +7,41 @@ const API_SECRET = 'SjHgibUdwROozvfIxekcc65GjVKG2171RmJL2xq6bpbMn3C1Faa0upz40QlP
 const sendHTTPRequest = async <T>(method: string, endpoint: string, params: any) => {
     const BASE_URL = config.isTest ? 'https://open-api-vst.bingx.com' : 'https://open-api.bingx.com';
     
-    // 1. ترتيب المعاملات وتشفير القيم (URL Encoding) للرموز والأقواس
-    const queryString = Object.keys(params)
+    // 1. بناء النص الأصلي (للتوقيع) - بدون encodeURIComponent ⚠️
+    const signString = Object.keys(params)
         .sort()
-        .map(key => {
-            // 💡 التعديل هنا: استخدام encodeURIComponent
-            return `${key}=${encodeURIComponent(params[key])}`;
-        })
+        .map(key => `${key}=${params[key]}`)
         .join('&');
 
-    // 2. التشفير وإنشاء التوقيع
+    // 2. التشفير وإنشاء التوقيع بناءً على النص الأصلي
     const signature = crypto
         .createHmac('sha256', API_SECRET)
-        .update(queryString)
+        .update(signString)
         .digest('hex');
 
-    const url = `${BASE_URL}${endpoint}?${queryString}&signature=${signature}`;
+    // 3. بناء النص المشفّر (لإرساله في الرابط) - مع encodeURIComponent ✅
+    const queryStringEncoded = Object.keys(params)
+        .sort()
+        .map(key => `${key}=${encodeURIComponent(params[key])}`)
+        .join('&');
 
-    // 3. إرسال الطلب
+    // 4. دمج الرابط النهائي
+    const url = `${BASE_URL}${endpoint}?${queryStringEncoded}&signature=${signature}`;
+
     try {
         const response = await axios({
             method: method,
             url: url,
             headers: { 'X-BX-APIKEY': API_KEY }
         });
+        
+        // التحقق من كود المنصة لضمان عدم وجود أخطاء منطقية
+        if (response.data && response.data.code !== 0) {
+            console.error('❌ المنصة استلمت الطلب ورفضته:', response.data);
+        }
+        
         return response.data as T;
     } catch (error: any) {
-        // طباعة تفاصيل الخطأ من المنصة لتسهيل قراءته لك بدال اللستة الطويلة
         if (error.response && error.response.data) {
             console.error('❌ خطأ من المنصة:', error.response.data);
         } else {
@@ -73,16 +81,15 @@ export async function hasActiveTrade() {
 
         // 🚀 تنفيذ الطلبين في نفس الوقت لتسريع الاستجابة
         const [positionsResponse, ordersResponse] = await Promise.all([
-            sendHTTPRequest('GET', '/openApi/swap/v2/user/positions', { symbol, timestamp }),
+            sendHTTPRequest('GET', '/openApi/swap/v2/user/positions', { timestamp }),
             sendHTTPRequest('GET', '/openApi/swap/v2/trade/openOrders', { symbol, timestamp })
         ]);
 
         const positions = (positionsResponse as any).data || [];
-        const hasPosition = positions.some((pos:any) => parseFloat(pos.positionAmt) !== 0);
+        const hasPosition = positions.length > 0;
 
         const openOrders = (ordersResponse as any).data || [];
-        const hasOrder = openOrders.length > 0;
-
+        const hasOrder = openOrders.orders.length > 0;
         return hasPosition || hasOrder;
 
     } catch (error) {
@@ -92,14 +99,16 @@ export async function hasActiveTrade() {
 }
 
 export const setLavrage = async () => {
-    const endpoint = '/openApi/swap/v2/position/leverage';
+    const endpoint = '/openApi/swap/v2/trade/leverage';
     const params = {
         symbol: config.symbol,
         leverage: config.leverage,
-        side: 'BOTH',
+        side: 'LONG',
         timestamp: Date.now()
     };
     await sendHTTPRequest('POST', endpoint, params);
+    params.side = "SHORT"
+     await sendHTTPRequest('POST', endpoint, params);
     console.log(`Leverage set to ${config.leverage}x for ${config.symbol}`);
 }
 
@@ -108,8 +117,18 @@ export const order = async (entryPrice: number, positionSide: "LONG" | "SHORT") 
     const tpPercentage = 0.50; // 50% ربح
     const slPercentage = 0.25; // 25% خسارة
 
-    const tpPrice = (entryPrice * (1 + tpPercentage)).toFixed(2); // 63000.00
-    const slPrice = (entryPrice * (1 - slPercentage)).toFixed(2); // 58200.00
+    let tpPrice: string;
+    let slPrice: string;
+
+    // 🚀 تصحيح الحسابات بناءً على نوع الصفقة
+    if (positionSide === 'LONG') {
+        tpPrice = (entryPrice * (1 + tpPercentage)).toFixed(2); // اللونق: الربح صعوداً
+        slPrice = (entryPrice * (1 - slPercentage)).toFixed(2); // اللونق: الخسارة نزولاً
+    } else { 
+        // 🚀 الـ SHORT: نعكس الحسبة!
+        tpPrice = (entryPrice * (1 - tpPercentage)).toFixed(2); // الشورت: الربح نزولاً
+        slPrice = (entryPrice * (1 + slPercentage)).toFixed(2); // الشورت: الخسارة صعوداً
+    }
 
     const rawQuantity = (config.usdtAmount * config.leverage) / entryPrice;
     const finalQuantity = parseFloat(rawQuantity.toFixed(3));
@@ -123,7 +142,7 @@ export const order = async (entryPrice: number, positionSide: "LONG" | "SHORT") 
         price: entryPrice,
         takeProfit: JSON.stringify({
             type: "TAKE_PROFIT_MARKET",
-            stopPrice: parseFloat(tpPrice)
+            stopPrice: parseFloat(tpPrice),
         }),
         stopLoss: JSON.stringify({
             type: "STOP_MARKET",
@@ -131,6 +150,42 @@ export const order = async (entryPrice: number, positionSide: "LONG" | "SHORT") 
         }),
         timestamp: Date.now()
     };
-    await sendHTTPRequest('POST', endpoint, params);
+    const res = await sendHTTPRequest('POST', endpoint, params);
+    if ((res as any).code != 0) {
+        console.error(`❌ Error placing order: ${(res as any).msg}`);
+    }
+    console.log(`Order placed: ${positionSide} at ${parseFloat(entryPrice.toFixed(5))}, TP: ${tpPrice}, SL: ${slPrice}`);
+}
+
+export const orderCustom = async (entryPrice: number, positionSide: "LONG" | "SHORT", tpPrice: number, slPrice: number) => {
+    const endpoint = '/openApi/swap/v2/trade/order';
+
+    const tpPriceStr = tpPrice.toFixed(2);
+    const slPriceStr = slPrice.toFixed(2);
+
+    const rawQuantity = (config.usdtAmount * config.leverage) / entryPrice;
+    const finalQuantity = parseFloat(rawQuantity.toFixed(3));
+
+    const params = {
+        symbol: config.symbol,
+        side: positionSide === 'LONG' ? 'BUY' : 'SELL',
+        positionSide: positionSide,
+        type: 'LIMIT',
+        quantity: finalQuantity,
+        price: entryPrice,
+        takeProfit: JSON.stringify({
+            type: "TAKE_PROFIT_MARKET",
+            stopPrice: parseFloat(tpPriceStr),
+        }),
+        stopLoss: JSON.stringify({
+            type: "STOP_MARKET",
+            stopPrice: parseFloat(slPriceStr)
+        }),
+        timestamp: Date.now()
+    };
+    const res = await sendHTTPRequest('POST', endpoint, params);
+    if ((res as any).code != 0) {
+        console.error(`❌ Error placing order: ${(res as any).msg}`);
+    }
     console.log(`Order placed: ${positionSide} at ${parseFloat(entryPrice.toFixed(5))}, TP: ${tpPrice}, SL: ${slPrice}`);
 }
