@@ -13,6 +13,6 @@
     "sourceMap": true,
     "declaration": true
   },
-  "include": ["*.ts"],
+  "include": ["*.ts", "old/historical.ts", "old/math.ts"],
   "exclude": ["node_modules", "dist"]
 }

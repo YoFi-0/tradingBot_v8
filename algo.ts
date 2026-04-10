@@ -1,7 +1,5 @@
 import { config } from ".";
 import { hasActiveTrade, order } from "./bingx";
-import { getLast1000andles } from "./historical";
-import { getOrderPrice, getTrend } from "./math";
 
 export const algo = async () => {
     const symbol = config.symbol;
@@ -12,14 +10,10 @@ export const algo = async () => {
             console.log("there is active trade, skip this round");
             return;
         }
-        const candles = await getLast1000andles(symbol, interval);
-        const trend = getTrend(candles);
-        const getBuyPrice = getOrderPrice(candles);
-        if(!getBuyPrice) {
-            console.log("cannot get buy price, skip this round");
-            return;
-        }
-        order(getBuyPrice, trend === "up" ? "LONG" : "SHORT");
+        
+        // algo here
+
+        // order(getBuyPrice, trend === "up" ? "LONG" : "SHORT");
     }
     run();
     setInterval(async () => {
