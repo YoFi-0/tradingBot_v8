@@ -100,13 +100,32 @@ export const backTestAlgo = async () => {
                 pendingOrder = null;
                 pendingOrderAge = 0; 
                 stats.totalTrades++;
-                tradeJustOpened = true; // 👈 الصفقة فتحت للتو
 
-                // 🔍 طباعة أول 3 صفقات لفهم الأرقام المجهرية
-                if (stats.totalTrades <= 3) {
+                // 🔍 طباعة تفاصيل أول 5 صفقات
+                if (stats.totalTrades <= 5) {
                     console.log(`\n[Trade ${stats.totalTrades}] OPENED!`);
-                    console.log(`Entry: ${activeTrade.entryPrice.toFixed(4)} | SL: ${activeTrade.stopLoss.toFixed(4)} | TP: ${activeTrade.takeProfit.toFixed(4)}`);
+                    console.log(`Entry: ${activeTrade.entryPrice.toFixed(4)} | TP: ${activeTrade.takeProfit.toFixed(4)}`);
+                    console.log(`Profit Distance: ${(activeTrade.takeProfit - activeTrade.entryPrice).toFixed(4)} USD`);
                     console.log(`SL Distance: ${(activeTrade.entryPrice - activeTrade.stopLoss).toFixed(4)} USD`);
+                }
+
+                // 🚨🚨 التعديل السحري: سحب الحصانة من شمعة الدخول 🚨🚨
+                // نفحص إذا كان النزول قوي جداً لدرجة أنه ضرب الوقف في نفس دقيقة الدخول!
+                if (currentCandle.low <= activeTrade.stopLoss) {
+                    const positionSizeUsd = backTestConfig.usdtPerTrade * backTestConfig.leverage;
+                    const quantity = positionSizeUsd / activeTrade.entryPrice; 
+                    const pnl = (activeTrade.stopLoss - activeTrade.entryPrice) * quantity;
+                    const fees = positionSizeUsd * backTestConfig.tradeTotalFees; 
+                    
+                    backTestConfig.wallet += (pnl - fees);
+                    stats.losses++;
+                    
+                    if (stats.totalTrades <= 5) console.log(`[Trade ${stats.totalTrades}] ❌ LOST IN THE ENTRY MINUTE (Wick hit SL): ${currentCandle.low}`);
+                    
+                    activeTrade = null; // إغلاق الصفقة بخسارة فوراً
+                } else {
+                    // إذا ذيل الشمعة فعل الطلب وما لمس الستوب لوس، نعطيه تصريح يكمل الشمعة الجاية
+                    tradeJustOpened = true; 
                 }
             } 
             else if (currentCandle.close > pendingOrder.entryPrice * 1.01 || pendingOrderAge > 30) {
@@ -114,7 +133,6 @@ export const backTestAlgo = async () => {
                 pendingOrderAge = 0; 
             }
         }
-
         // 2. إدارة الصفقة المفتوحة (لن تعمل في نفس شمعة الدخول)
         if (activeTrade && !tradeJustOpened) { 
             let isClosed = false;
@@ -174,7 +192,6 @@ export const backTestAlgo = async () => {
 
     // 3. طباعة النتائج النهائية
     console.log("📊 --- Backtest Results ---");
-    console.log(`Initial Wallet: $100.00`);
     console.log(`Final Wallet  : $${backTestConfig.wallet.toFixed(2)}`);
     console.log(`Total Trades  : ${stats.totalTrades}`);
     console.log(`Wins          : ${stats.wins}`);
