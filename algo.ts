@@ -198,8 +198,8 @@ const getTradeLevels = (c:ICandle[]) => {
     
     const preparationTolerance = 0.005; // 0.5%
     
-    const distanceToEntry = Math.abs(lastClose - sweepEntryPrice) / sweepEntryPrice;
-    const isNearEntry = distanceToEntry <= preparationTolerance;
+    const distanceToEntry = (lastClose - sweepEntryPrice) / sweepEntryPrice;
+    const isNearEntry = Math.abs(distanceToEntry) <= preparationTolerance && lastClose >= (sweepEntryPrice - currentAtr);
     
     const isMomentumReady = RSI.isOversold(historicalCandles, 14, 40);
  
