@@ -2,6 +2,15 @@ import { algo, backTestAlgo } from "./algo";
 import { hasActiveTrade, order, orderCustom, setLavrage, testApiKeys } from "./bingx";
 import { getLast1000andles } from "./old/historical";
 import { openBrowser } from "./tradingView";
+import express from "express";
+
+const app = express();
+app.get("/", (req, res) => {
+    res.send("Hello World!");
+});
+app.listen(3000, () => {
+    console.log("Server is running on port 3000");
+});
 
 interface IConfig {
     symbol: string;
