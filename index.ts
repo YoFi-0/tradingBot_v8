@@ -17,13 +17,13 @@ export const config:IConfig = {
     leverage: 20,
     mode: "backtest",
     chartIntrval: "1m",
-    sweepIntensity:0.5,
+    sweepIntensity:2,
     usdtAmount: 50,
 }
 
 export const backTestConfig = {
     wallet: 100,             // رأس المال المبدئي
-    leverage: 2,            // الرافعة المالية
+    leverage: 5,            // الرافعة المالية
     usdtPerTrade: 50,        // حجم الدخول بالهامش (الرصيد المستخدم في الصفقة)
     tradeTotalFees: 0.001,   // نسبة الرسوم (مثلاً 0.1% للفتح والإغلاق - تم تعديلها لتكون نسبة مئوية واقعية)
 };

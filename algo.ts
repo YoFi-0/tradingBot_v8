@@ -62,13 +62,14 @@ export const backTestAlgo = async () => {
     const fifteenDaysAgo = now - (15 * 24 * 60 * 60 * 1000);
     
     // جلب البيانات
-    const c = await getHistoricalData(
+    let c = await getHistoricalData(
         "1m", 
         fifteenDaysAgo, 
         now, 
         `candles_${config.symbol}_1m_last15days.json`
     );
-
+    
+    c.reverse();
     let activeTrade: ActiveTradeBackTest | null = null;
     let pendingOrder: ActiveTradeBackTest | null = null; // إضافة متغير الأوردر المعلق
 
