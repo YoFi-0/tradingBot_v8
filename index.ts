@@ -24,7 +24,7 @@ interface IConfig {
 export const config:IConfig = {
     symbol: 'SOL-USDT',
     leverage: 20,
-    mode: "bingx_test",
+    mode: "backtest",
     chartIntrval: "1m",
     sweepIntensity:2,
     usdtAmount: 50,
