@@ -25,16 +25,16 @@ interface IConfig {
 export const config:IConfig = {
     symbol: 'SOL-USDT',
     leverage: 20,
-    mode: "bingx_test",
+    mode: "backtest",
     chartIntrval: "1m",
     sweepIntensity:2,
     usdtAmount: 50,
 }
 
 export const backTestConfig = {
-    wallet: 100,             // رأس المال المبدئي
+    wallet: 20,             // رأس المال المبدئي
     leverage: 20,            // الرافعة المالية
-    usdtPerTrade: 50,        // حجم الدخول بالهامش (الرصيد المستخدم في الصفقة)
+    usdtPerTrade: 10,        // حجم الدخول بالهامش (الرصيد المستخدم في الصفقة)
     tradeTotalFees: 0.001,   // نسبة الرسوم (مثلاً 0.1% للفتح والإغلاق - تم تعديلها لتكون نسبة مئوية واقعية)
 };
 
