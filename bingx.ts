@@ -1,6 +1,7 @@
 import { config } from "."
 import axios from "axios";
 import  crypto from 'crypto';
+import { sendDiscordMessage } from "./webhook";
 const API_KEY = 'XKd5fFc3uyAUI4N3Yob3BV2JvRIZT0wdGWH5eUaEyEvJOZ6b1W6T5LD7dPOYO3FN83i4Zz6ctT9kSuxUIzJuGQ';
 const API_SECRET = 'SjHgibUdwROozvfIxekcc65GjVKG2171RmJL2xq6bpbMn3C1Faa0upz40QlPw5qD0JYfVMXY3Q7o7w';
 
@@ -38,17 +39,72 @@ const sendHTTPRequest = async <T>(method: string, endpoint: string, params: any)
         
         // التحقق من كود المنصة لضمان عدم وجود أخطاء منطقية
         if (response.data && response.data.code !== 0) {
-            console.error('❌ المنصة استلمت الطلب ورفضته:', response.data);
+            console.error('❌ The platform received the request and rejected it:', response.data);
+            await sendDiscordMessage(`'❌ The platform received the request and rejected it:' ${JSON.stringify(response.data)}`, "BingX API Error");
         }
         
         return response.data as T;
     } catch (error: any) {
         if (error.response && error.response.data) {
-            console.error('❌ خطأ من المنصة:', error.response.data);
+            console.error('❌ bingx err:', error.response.data);
+            await sendDiscordMessage(`❌ bingx err: ${JSON.stringify(error.response.data)}`, "BingX API Error");
         } else {
-            console.error('❌ خطأ في الاتصال:', error.message);
+            console.error('❌ bingx connection err', error.message);
+            await sendDiscordMessage(`❌ bingx connection err: ${JSON.stringify(error.response.data)}`, "BingX API Error");
         }
         throw error;
+    }
+}
+
+/**
+ * وظيفة لفحص الطلبات المفتوحة وإلغاء أي طلب مر عليه أكثر من 31 دقيقة
+ */
+export async function cancelOldOrders() {
+    const symbol = config.symbol;
+    const getOrdersEndpoint = '/openApi/swap/v2/trade/openOrders';
+    const cancelOrderEndpoint = '/openApi/swap/v2/trade/order';
+    
+    const THIRTY_ONE_MINUTES_MS = 31 * 60 * 1000;
+
+
+    const now = Date.now();
+    
+    // 1. جلب الطلبات المفتوحة حالياً
+    const response: any = await sendHTTPRequest('GET', getOrdersEndpoint, { 
+        symbol, 
+        timestamp: now 
+    });
+
+    if (response.code === 0 && response.data && response.data.orders) {
+        const openOrders = response.data.orders;
+
+        for (const order of openOrders) {
+            const orderTime = order.time; // وقت إنشاء الطلب من المنصة
+            const ageMs = now - orderTime; // الفرق الزمني بالملي ثانية
+
+            // 2. التحقق إذا كان الطلب أقدم من 31 دقيقة
+            if (ageMs > THIRTY_ONE_MINUTES_MS) {
+                const ageMinutes = Math.floor(ageMs / 60000);
+                console.log(`⏳ canceling order ${order.orderId} which is ${ageMinutes} minutes old...`);
+
+                // 3. تنفيذ طلب الإلغاء
+                const cancelParams = {
+                    symbol: symbol,
+                    orderId: order.orderId,
+                    timestamp: Date.now()
+                };
+
+                const cancelRes: any = await sendHTTPRequest('DELETE', cancelOrderEndpoint, cancelParams);
+                
+                if (cancelRes.code === 0) {
+                    console.log(`✅ Order ${order.orderId} canceled successfully.`);
+                    sendDiscordMessage(`❌ Order canceled after being open for ${ageMinutes} minutes.`, "TraDing Bot : )");
+                } else {
+                    console.error(`❌ Failed to cancel order ${order.orderId}: ${cancelRes.msg}`);
+                    sendDiscordMessage(`❌ Failed to cancel order ${order.orderId}: ${cancelRes.msg}\n cancele it yourself`, "TraDing Bot : )");
+                }
+            }
+        }
     }
 }
 

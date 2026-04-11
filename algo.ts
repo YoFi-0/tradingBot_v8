@@ -1,5 +1,5 @@
 import { backTestConfig, config } from ".";
-import { hasActiveTrade, orderCustom } from "./bingx";
+import { cancelOldOrders, hasActiveTrade, orderCustom } from "./bingx";
 import { getLast1000andles, getHistoricalData } from "./old/historical";
 import { EMA, VWAP, RSI, ATR, RISK, ICandle } from "./old/math"; // أضفنا TimeFilter
 import { sendTradeNotification } from "./webhook";
@@ -11,6 +11,7 @@ export const algo = async () => {
     console.log("🚀 Starting algo...");
     const run = async () => {
         try {
+            await cancelOldOrders();
             const hasTrade = await hasActiveTrade();
             if (hasTrade) {
                 console.log("🔗 On Trade");

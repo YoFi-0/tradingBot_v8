@@ -1,9 +1,9 @@
 import { algo, backTestAlgo } from "./algo";
-import { hasActiveTrade, order, orderCustom, setLavrage, testApiKeys } from "./bingx";
+import { cancelOldOrders, hasActiveTrade, order, orderCustom, setLavrage, testApiKeys } from "./bingx";
 import { getLast1000andles } from "./old/historical";
 import { openBrowser } from "./tradingView";
 import express from "express";
-import { sendTradeNotification } from "./webhook";
+import { sendDiscordMessage, sendTradeNotification } from "./webhook";
 
 const app = express();
 app.get("/", (req, res) => {
@@ -72,16 +72,12 @@ const readeConfig = async () => {
 
 const main = async () => {
     await readeConfig();
-    await sendTradeNotification({
-        type: "LONG",
-        entryPrice: 0,
-        takeProfit: 0,
-        stopLoss: 0
-    })
     if(config.mode === "backtest") {
         backTestAlgo();
         return;
     }
+    await cancelOldOrders();
+    await sendDiscordMessage("Hi ThEre Its BeEN A While", "")
     await setLavrage();
     await algo();
 }

@@ -1,7 +1,7 @@
 import axios from "axios";
 import { config } from ".";
 
-async function sendDiscordMessage(message: string, title?: string) {
+export async function sendDiscordMessage(message: string, title?: string) {
     const webhookUrl = "https://discord.com/api/webhooks/1492549440458850485/2OO6cnd71GCbhT7Qui_ce2AvgM6oUlAaSx3EwchYJXXSg6HQHIneScQphWd0TSGq-gdY"
     try {
         const response = await axios.post(webhookUrl, {
