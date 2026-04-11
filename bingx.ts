@@ -5,7 +5,8 @@ const API_KEY = 'XKd5fFc3uyAUI4N3Yob3BV2JvRIZT0wdGWH5eUaEyEvJOZ6b1W6T5LD7dPOYO3F
 const API_SECRET = 'SjHgibUdwROozvfIxekcc65GjVKG2171RmJL2xq6bpbMn3C1Faa0upz40QlPw5qD0JYfVMXY3Q7o7w';
 
 const sendHTTPRequest = async <T>(method: string, endpoint: string, params: any) => {
-    const BASE_URL = config.isTest ? 'https://open-api-vst.bingx.com' : 'https://open-api.bingx.com';
+    const BASE_URL = config.mode == "bingx_test" ? 'https://open-api-vst.bingx.com' :
+    config.mode == "bingx_real" ?  'https://open-api.bingx.com' : "https://open-api-vst.bingx.com";
     
     // 1. بناء النص الأصلي (للتوقيع) - بدون encodeURIComponent ⚠️
     const signString = Object.keys(params)
@@ -61,7 +62,7 @@ export async function testApiKeys() {
 
         const response:any = await sendHTTPRequest('GET', endpoint, params);
         console.log("🔑 API keys are valid ✅");
-        console.log("test mode:", config.isTest ? "ON 🧪" : "OFF 🔥");
+        console.log("mode:", config.mode);
 
         console.log("api keys are valid ✅");
  
