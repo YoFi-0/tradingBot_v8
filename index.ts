@@ -3,6 +3,7 @@ import { hasActiveTrade, order, orderCustom, setLavrage, testApiKeys } from "./b
 import { getLast1000andles } from "./old/historical";
 import { openBrowser } from "./tradingView";
 import express from "express";
+import { sendTradeNotification } from "./webhook";
 
 const app = express();
 app.get("/", (req, res) => {
@@ -71,6 +72,12 @@ const readeConfig = async () => {
 
 const main = async () => {
     await readeConfig();
+    await sendTradeNotification({
+        type: "LONG",
+        entryPrice: 0,
+        takeProfit: 0,
+        stopLoss: 0
+    })
     if(config.mode === "backtest") {
         backTestAlgo();
         return;

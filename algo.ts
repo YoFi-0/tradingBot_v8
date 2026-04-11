@@ -2,6 +2,7 @@ import { backTestConfig, config } from ".";
 import { hasActiveTrade, orderCustom } from "./bingx";
 import { getLast1000andles, getHistoricalData } from "./old/historical";
 import { EMA, VWAP, RSI, ATR, RISK, ICandle } from "./old/math"; // أضفنا TimeFilter
+import { sendTradeNotification } from "./webhook";
 
 export const algo = async () => {
     if(config.mode === "backtest") {
@@ -28,8 +29,12 @@ export const algo = async () => {
                 tradeLevels.takeProfit, 
                 tradeLevels.stopLoss
             );
-            
-
+            await sendTradeNotification({
+                type: "LONG",
+                entryPrice: tradeLevels.entryPrice,
+                takeProfit: tradeLevels.takeProfit,
+                stopLoss: tradeLevels.stopLoss
+            });
         } catch (error) {
             console.error("Error in algo run:", error);
         }
