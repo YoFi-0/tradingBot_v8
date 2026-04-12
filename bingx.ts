@@ -102,13 +102,6 @@ export async function cancelOldOrders() {
                 continue; // تجاهل أوامر الحماية وانتقل للي بعده
             }
             const safeOrderId = String(order.orderId);
-            const cancelParams = {
-                    symbol: symbol,
-                    orderId: safeOrderId,
-                    timestamp: Date.now()
-                };
-                console.log(order)
-            const cancelRes: any = await sendHTTPRequest('DELETE', cancelOrderEndpoint, cancelParams);
             // 2. التحقق إذا كان الطلب أقدم من 31 دقيقة
             if (ageMs > THIRTY_ONE_MINUTES_MS) {
                 const ageMinutes = Math.floor(ageMs / 60000);
