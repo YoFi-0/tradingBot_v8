@@ -75,6 +75,7 @@ export const backTestAlgo = async () => {
     // نهاية سنة 2023 (31 ديسمبر الساعة 23:59:59)
     const endOf2023 = new Date('2024-12-31T23:59:59Z').getTime();
     
+    // this function is not taking anything right
     let c = await getHistoricalData(
         "1m", 
         startOf2023, 
