@@ -1,9 +1,14 @@
 import { algo, backTestAlgo } from "./algo";
-import { cancelOldOrders, hasActiveTrade, order, orderCustom, setLavrage, testApiKeys } from "./bingx";
+import { cancelOldOrders, order, orderCustom, setLavrage, testApiKeys } from "./bingx";
 import { getLast1000andles } from "./old/historical";
 import { openBrowser } from "./tradingView";
 import express from "express";
 import { sendDiscordMessage, sendTradeNotification } from "./webhook";
+
+process.on('uncaughtException', (reason) => {
+    console.error('Unhandled Rejection at:', 'reason:', reason);
+    sendDiscordMessage(`Unhandled Exception Reason: ${reason}`);
+});
 
 const app = express();
 app.get("/", (req, res) => {
@@ -32,9 +37,9 @@ export const config:IConfig = {
 }
 
 export const backTestConfig = {
-    wallet: 100,             // رأس المال المبدئي
+    wallet: 20,             // رأس المال المبدئي
     leverage: 20,            // الرافعة المالية
-    usdtPerTrade: 50,        // حجم الدخول بالهامش (الرصيد المستخدم في الصفقة)
+    usdtPerTrade: 10,        // حجم الدخول بالهامش (الرصيد المستخدم في الصفقة)
     tradeTotalFees: 0.001,   // نسبة الرسوم (مثلاً 0.1% للفتح والإغلاق - تم تعديلها لتكون نسبة مئوية واقعية)
 };
 
@@ -77,7 +82,7 @@ const main = async () => {
         return;
     }
     await cancelOldOrders();
-    await sendDiscordMessage("Hi ThEre Its BeEN A While", "")
+    await sendDiscordMessage("Hi ThEre Its BeEN A While", "TraDing Bot : )")
     await setLavrage();
     await algo();
 }

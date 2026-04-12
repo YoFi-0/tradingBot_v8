@@ -34,7 +34,19 @@ const sendHTTPRequest = async <T>(method: string, endpoint: string, params: any)
         const response = await axios({
             method: method,
             url: url,
-            headers: { 'X-BX-APIKEY': API_KEY }
+            headers: { 'X-BX-APIKEY': API_KEY },
+            transformResponse: [function (data) {
+                if (typeof data === 'string') {
+                    // هذا السطر يبحث عن أي orderId (أو id) ويضع الرقم بين علامات تنصيص ليصبح نص (String)
+                    const fixedData = data.replace(/"(orderId|id)":\s*(\d+)/g, '"$1":"$2"');
+                    try {
+                        return JSON.parse(fixedData);
+                    } catch (e) {
+                        return data;
+                    }
+                }
+                return data;
+            }]
         });
         
         // التحقق من كود المنصة لضمان عدم وجود أخطاء منطقية
@@ -60,6 +72,11 @@ const sendHTTPRequest = async <T>(method: string, endpoint: string, params: any)
  * وظيفة لفحص الطلبات المفتوحة وإلغاء أي طلب مر عليه أكثر من 31 دقيقة
  */
 export async function cancelOldOrders() {
+    const inTrade = await hasPostions();
+    if (inTrade) {
+        console.log("🛡️ Active position exists. Skipping cancellation to protect TP/SL.");
+        return; // نوقف الدالة هنا تماماً
+    }
     const symbol = config.symbol;
     const getOrdersEndpoint = '/openApi/swap/v2/trade/openOrders';
     const cancelOrderEndpoint = '/openApi/swap/v2/trade/order';
@@ -81,16 +98,27 @@ export async function cancelOldOrders() {
         for (const order of openOrders) {
             const orderTime = order.time; // وقت إنشاء الطلب من المنصة
             const ageMs = now - orderTime; // الفرق الزمني بالملي ثانية
-
+            if (order.type && order.type !== 'LIMIT') {
+                continue; // تجاهل أوامر الحماية وانتقل للي بعده
+            }
+            const safeOrderId = String(order.orderId);
+            const cancelParams = {
+                    symbol: symbol,
+                    orderId: safeOrderId,
+                    timestamp: Date.now()
+                };
+                console.log(order)
+            const cancelRes: any = await sendHTTPRequest('DELETE', cancelOrderEndpoint, cancelParams);
             // 2. التحقق إذا كان الطلب أقدم من 31 دقيقة
             if (ageMs > THIRTY_ONE_MINUTES_MS) {
                 const ageMinutes = Math.floor(ageMs / 60000);
                 console.log(`⏳ canceling order ${order.orderId} which is ${ageMinutes} minutes old...`);
-
+                
+                
                 // 3. تنفيذ طلب الإلغاء
                 const cancelParams = {
                     symbol: symbol,
-                    orderId: order.orderId,
+                    orderId: safeOrderId,
                     timestamp: Date.now()
                 };
 
@@ -131,23 +159,40 @@ export async function testApiKeys() {
     }
 }
 
-export async function hasActiveTrade() {
+export async function hasOrders() {
     const symbol = config.symbol;
     try {
         const timestamp = Date.now();
 
         // 🚀 تنفيذ الطلبين في نفس الوقت لتسريع الاستجابة
-        const [positionsResponse, ordersResponse] = await Promise.all([
-            sendHTTPRequest('GET', '/openApi/swap/v2/user/positions', { timestamp }),
+        const [ordersResponse] = await Promise.all([
             sendHTTPRequest('GET', '/openApi/swap/v2/trade/openOrders', { symbol, timestamp })
+        ]);
+
+        const openOrders = (ordersResponse as any).data || [];
+        const hasOrder = openOrders.orders.length > 0;
+        return hasOrder;
+
+    } catch (error) {
+        console.error(`❌ error at scanning active trades for ${symbol}:`, error);
+        throw error; 
+    }
+}
+export async function hasPostions() {
+    const symbol = config.symbol;
+    try {
+        const timestamp = Date.now();
+
+        // 🚀 تنفيذ الطلبين في نفس الوقت لتسريع الاستجابة
+        const [positionsResponse] = await Promise.all([
+            sendHTTPRequest('GET', '/openApi/swap/v2/user/positions', { timestamp }),
         ]);
 
         const positions = (positionsResponse as any).data || [];
         const hasPosition = positions.length > 0;
 
-        const openOrders = (ordersResponse as any).data || [];
-        const hasOrder = openOrders.orders.length > 0;
-        return hasPosition || hasOrder;
+  
+        return hasPosition;
 
     } catch (error) {
         console.error(`❌ error at scanning active trades for ${symbol}:`, error);

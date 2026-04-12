@@ -1,5 +1,5 @@
 import { backTestConfig, config } from ".";
-import { cancelOldOrders, hasActiveTrade, orderCustom } from "./bingx";
+import { cancelOldOrders, hasOrders, hasPostions, orderCustom } from "./bingx";
 import { getLast1000andles, getHistoricalData } from "./old/historical";
 import { EMA, VWAP, RSI, ATR, RISK, ICandle } from "./old/math"; // أضفنا TimeFilter
 import { sendTradeNotification } from "./webhook";
@@ -11,14 +11,20 @@ export const algo = async () => {
     console.log("🚀 Starting algo...");
     const run = async () => {
         try {
+            const isHasPostions = await hasPostions();
+            if (isHasPostions) {
+                console.log("🔗 On Postion");
+                return;
+            }
             await cancelOldOrders();
-            const hasTrade = await hasActiveTrade();
-            if (hasTrade) {
-                console.log("🔗 On Trade");
+            const isHasOrders = await hasOrders();
+            if (isHasPostions || isHasOrders) {
+                console.log("🔗 There is an order");
                 return;
             } else {
                 console.log("🔍 Scanning For New Trade Opportunities...");
             }
+            
             const historicalCandles = await getLast1000andles(config.chartIntrval as "1m" | "15m" | "1h");
             const tradeLevels = getTradeLevels(historicalCandles);
             if(!tradeLevels) {
