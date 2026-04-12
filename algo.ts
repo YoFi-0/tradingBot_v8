@@ -67,13 +67,11 @@ interface ActiveTradeBackTest {
 }
 
 export const backTestAlgo = async () => {
-    console.log("⏳ Starting Backtest...");
+    console.log("⏳ Starting REALISTIC Backtest (with Spread & Slippage)...");
     
-    // افتراض أن هذه الدالة تجلب الـ 512 ألف شمعة
     const now = Date.now();
     const fifteenDaysAgo = now - (15 * 24 * 60 * 60 * 1000);
     
-    // جلب البيانات
     let c = await getHistoricalData(
         "1m", 
         fifteenDaysAgo, 
@@ -83,7 +81,7 @@ export const backTestAlgo = async () => {
     
     c.reverse();
     let activeTrade: ActiveTradeBackTest | null = null;
-    let pendingOrder: ActiveTradeBackTest | null = null; // إضافة متغير الأوردر المعلق
+    let pendingOrder: ActiveTradeBackTest | null = null; 
 
     let stats = {
         totalTrades: 0,
@@ -92,76 +90,88 @@ export const backTestAlgo = async () => {
         highestWallet: backTestConfig.wallet,
         lowestWallet: backTestConfig.wallet,
     };
+
+    // 🚨 إضافة عامل الواقعية: 0.05% سبريد وانزلاق سعري
+    const SPREAD_RATE = 0.0005; 
+
     for (let i = 1000; i < c.length; i++) {
         const currentCandle = c[i];
         let pendingOrderAge = 0; 
-        let tradeJustOpened = false; // 👈 إضافة هذا المتغير لمنع إغلاق الصفقة في نفس الشمعة
+        let tradeJustOpened = false; 
 
         // 1. معالجة الأوامر المعلقة
         if (pendingOrder && !activeTrade) {
             pendingOrderAge++; 
 
-            if (currentCandle.low <= pendingOrder.entryPrice) {
+            const isLongTriggered = pendingOrder.type === "LONG" && currentCandle.low <= pendingOrder.entryPrice;
+
+            if (isLongTriggered) {
                 activeTrade = pendingOrder;
                 pendingOrder = null;
                 pendingOrderAge = 0; 
                 stats.totalTrades++;
 
-                // 🔍 طباعة تفاصيل أول 5 صفقات
                 if (stats.totalTrades <= 5) {
-                    console.log(`\n[Trade ${stats.totalTrades}] OPENED!`);
-                    console.log(`Entry: ${activeTrade.entryPrice.toFixed(4)} | TP: ${activeTrade.takeProfit.toFixed(4)}`);
-                    console.log(`Profit Distance: ${(activeTrade.takeProfit - activeTrade.entryPrice).toFixed(4)} USD`);
-                    console.log(`SL Distance: ${(activeTrade.entryPrice - activeTrade.stopLoss).toFixed(4)} USD`);
+                    console.log(`\n[Trade ${stats.totalTrades}] ${activeTrade.type} OPENED!`);
                 }
 
-                // 🚨🚨 التعديل السحري: سحب الحصانة من شمعة الدخول 🚨🚨
-                // نفحص إذا كان النزول قوي جداً لدرجة أنه ضرب الوقف في نفس دقيقة الدخول!
-                if (currentCandle.low <= activeTrade.stopLoss) {
+                // 🚨 التعديل الواقعي لضرب الوقف في نفس الشمعة
+                // اللونق ينضرب وقفه أسرع (نضرب السعر في 1 + السبريد) والشورت ينضرب أسرع (نضرب السعر في 1 - السبريد)
+                const isLongSlHit = activeTrade.type === "LONG" && currentCandle.low <= activeTrade.stopLoss * (1 + SPREAD_RATE);
+                if (isLongSlHit) {
                     const positionSizeUsd = backTestConfig.usdtPerTrade * backTestConfig.leverage;
                     const quantity = positionSizeUsd / activeTrade.entryPrice; 
-                    const pnl = (activeTrade.stopLoss - activeTrade.entryPrice) * quantity;
+                    
+                    // حساب الخسارة
+                    let pnl = activeTrade.type === "LONG" 
+                        ? (activeTrade.stopLoss - activeTrade.entryPrice) * quantity
+                        : (activeTrade.entryPrice - activeTrade.stopLoss) * quantity; 
+                        
+                    // إضافة ضريبة الانزلاق للخسارة
+                    const slippageCost = positionSizeUsd * SPREAD_RATE;
                     const fees = positionSizeUsd * backTestConfig.tradeTotalFees; 
                     
-                    backTestConfig.wallet += (pnl - fees);
+                    backTestConfig.wallet += (pnl - fees - slippageCost);
                     stats.losses++;
                     
-                    if (stats.totalTrades <= 5) console.log(`[Trade ${stats.totalTrades}] ❌ LOST IN THE ENTRY MINUTE (Wick hit SL): ${currentCandle.low}`);
+                    if (stats.totalTrades <= 5) console.log(`[Trade ${stats.totalTrades}] ❌ LOST IN THE ENTRY MINUTE (Mark Price Hit)`);
                     
-                    activeTrade = null; // إغلاق الصفقة بخسارة فوراً
+                    activeTrade = null; 
                 } else {
-                    // إذا ذيل الشمعة فعل الطلب وما لمس الستوب لوس، نعطيه تصريح يكمل الشمعة الجاية
                     tradeJustOpened = true; 
                 }
             } 
-            else if (currentCandle.close > pendingOrder.entryPrice * 1.01 || pendingOrderAge > 30) {
+            else if (pendingOrderAge > 30) {
                 pendingOrder = null;
                 pendingOrderAge = 0; 
             }
         }
-        // 2. إدارة الصفقة المفتوحة (لن تعمل في نفس شمعة الدخول)
+
+        // 2. إدارة الصفقة المفتوحة
         if (activeTrade && !tradeJustOpened) { 
             let isClosed = false;
             let pnl = 0;
 
             const positionSizeUsd = backTestConfig.usdtPerTrade * backTestConfig.leverage;
             const quantity = positionSizeUsd / activeTrade.entryPrice; 
+            const slippageCost = positionSizeUsd * SPREAD_RATE; // تكلفة الانزلاق الواقعية
 
-            // فحص ضرب الستوب لوس أو التيك بروفيت
+            // 🟢 فحص اللونق (واقعي)
             if (activeTrade.type === "LONG") {
-                if (currentCandle.low <= activeTrade.stopLoss) {
-                    pnl = (activeTrade.stopLoss - activeTrade.entryPrice) * quantity;
+                if (currentCandle.low <= activeTrade.stopLoss * (1 + SPREAD_RATE)) {
+                    // الخسارة = (سعر الخروج الصغير - سعر الدخول الكبير) * الكمية -> بيطلع رقم سالب
+                    pnl = (activeTrade.stopLoss - activeTrade.entryPrice) * quantity; 
                     stats.losses++;
                     isClosed = true;
-                    if (stats.totalTrades <= 3) console.log(`[Trade ${stats.totalTrades}] ❌ LOST at candle low: ${currentCandle.low}`);
                 } 
-                else if (currentCandle.high >= activeTrade.takeProfit) {
+                else if (currentCandle.high >= activeTrade.takeProfit * (1 - SPREAD_RATE)) {
+                    // الربح = (سعر الخروج الكبير - سعر الدخول الصغير) * الكمية -> بيطلع رقم موجب
                     pnl = (activeTrade.takeProfit - activeTrade.entryPrice) * quantity;
                     stats.wins++;
                     isClosed = true;
-                    if (stats.totalTrades <= 3) console.log(`[Trade ${stats.totalTrades}] ✅ WON at candle high: ${currentCandle.high}`);
                 }
             }
+            // 🔴 فحص الشورت (واقعي)
 
             if (isClosed) {
                 const fees = positionSizeUsd * backTestConfig.tradeTotalFees; 
@@ -183,13 +193,13 @@ export const backTestAlgo = async () => {
         // 3. البحث عن صفقات جديدة
         if (!activeTrade && !pendingOrder) {
             const historicalCandles = c.slice(i - 1000, i);
-            const tradeSignal = getTradeLevels(historicalCandles);
-
-            if (tradeSignal) {
+            const tradeLongSignal = getTradeLevels(historicalCandles);
+            
+            if (tradeLongSignal) {
                 pendingOrder = {
-                    entryPrice: tradeSignal.entryPrice,
-                    takeProfit: tradeSignal.takeProfit,
-                    stopLoss: tradeSignal.stopLoss,
+                    entryPrice: tradeLongSignal.entryPrice,
+                    takeProfit: tradeLongSignal.takeProfit,
+                    stopLoss: tradeLongSignal.stopLoss,
                     type: "LONG" 
                 };
             }
@@ -197,15 +207,15 @@ export const backTestAlgo = async () => {
     }
 
     // 3. طباعة النتائج النهائية
-    console.log("📊 --- Backtest Results ---");
+    console.log("📊 --- REALISTIC Backtest Results ---");
     console.log(`Final Wallet  : $${backTestConfig.wallet.toFixed(2)}`);
     console.log(`Total Trades  : ${stats.totalTrades}`);
     console.log(`Wins          : ${stats.wins}`);
     console.log(`Losses        : ${stats.losses}`);
-    console.log(`Win Rate      : ${((stats.wins / stats.totalTrades) * 100).toFixed(2)}%`);
+    console.log(`Win Rate      : ${stats.totalTrades > 0 ? ((stats.wins / stats.totalTrades) * 100).toFixed(2) : 0}%`);
     console.log(`Max Wallet    : $${stats.highestWallet.toFixed(2)}`);
     console.log(`Min Wallet    : $${stats.lowestWallet.toFixed(2)}`);
-    console.log("----------------------------");
+    console.log("--------------------------------------");
 }
 
 const getTradeLevels = (c:ICandle[]) => {
