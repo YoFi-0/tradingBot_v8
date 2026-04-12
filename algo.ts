@@ -70,16 +70,22 @@ export const backTestAlgo = async () => {
     console.log("⏳ Starting REALISTIC Backtest (with Spread & Slippage)...");
     
     const now = Date.now();
-    const fifteenDaysAgo = now - (15 * 24 * 60 * 60 * 1000);
+    const startOf2023 = new Date('2024-01-01T00:00:00Z').getTime();
+
+    // نهاية سنة 2023 (31 ديسمبر الساعة 23:59:59)
+    const endOf2023 = new Date('2024-12-31T23:59:59Z').getTime();
     
     let c = await getHistoricalData(
         "1m", 
-        fifteenDaysAgo, 
-        now, 
-        `candles_${config.symbol}_1m_last15days.json`
+        startOf2023, 
+        endOf2023, 
+        `candles_SOL-USDT_1h_2023.json`
     );
     
-    c.reverse();
+    // c.reverse();
+    console.log("sorting...")
+    c.sort((a, b) => a.time - b.time);
+     // تأكد من أن الشموع مرتبة من الأقدم إلى الأحدث
     let activeTrade: ActiveTradeBackTest | null = null;
     let pendingOrder: ActiveTradeBackTest | null = null; 
 

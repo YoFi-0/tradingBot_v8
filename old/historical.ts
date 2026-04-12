@@ -58,7 +58,7 @@ async function getCandlesBatch(interval: "1m" | "15m" | "1h", endTime: number): 
                 endTime: endTime
             }
         });
-
+        console.log(`API Response for batch ending at ${new Date(endTime).toISOString()}:`, response.data);
         if (response.data && response.data.code === 0) {
             const candles = response.data.data;
             // ❌ أزلنا .reverse() لنحافظ على الترتيب الأصلي: (الأقدم -> الأحدث)
@@ -73,53 +73,95 @@ async function getCandlesBatch(interval: "1m" | "15m" | "1h", endTime: number): 
 }
 
 // قمنا بتعديل الدالة لتجلب بيانات فترة معينة بدلاً من سنة كاملة فقط
-export async function getHistoricalData(interval: "1m" | "15m" | "1h", startTimestamp: number, endTimestamp: number, fileName: string): Promise<any[]> {
-    const filePath = path.join(process.cwd(), `backtest-data/${fileName}`);
-    // 1. التحقق من وجود الملف
-    try {
-        const fileData = await fs.readFile(filePath, 'utf-8');
-        console.log(`✅ Data loaded from file: ${fileName}`);
-        return JSON.parse(fileData);
-    } catch (error: any) {
-        if (error.code !== 'ENOENT') throw error; 
+export async function getHistoricalData(
+    interval: "1m" | "15m" | "1h", 
+    startTimestamp: number, 
+    endTimestamp: number, 
+    fileName: string
+): Promise<any[]> {
+    
+    // 🛡️ حماية مبدئية: التأكد أن التواريخ منطقية
+    if (startTimestamp >= endTimestamp) {
+        console.error("❌ Error: startTimestamp is greater than or equal to endTimestamp!");
+        return [];
     }
 
-    console.log("🌐 Fetching data from API, this may take a while...");
-    
-    let currentEndTime = endTimestamp;
-    let allCandles: any[] = [];
+    const filePath = path.join(process.cwd(), `backtest-data/${fileName}`);
 
-    while (currentEndTime > startTimestamp) {
-        await delay(150); // تأخير لتجنب الحظر
-
-        const batch = await getCandlesBatch(interval, currentEndTime);
-
-        if (batch.length === 0) {
-            console.log("⚠️ API returned no more historical data. Exchange limit reached.");
-            break; 
+    // 1. التحقق من وجود بيانات محلية
+    try {
+        const fileData = await fs.readFile(filePath, 'utf-8');
+        const parsedData = JSON.parse(fileData);
+        if (parsedData.length > 0) {
+            console.log(`✅ Loaded ${parsedData.length} candles from local file: ${fileName}`);
+            return parsedData;
         }
+    } catch (e: any) {
+        if (e.code !== 'ENOENT') throw e; 
+    }
 
-        const filteredBatch = batch.filter((c: any) => c.time >= startTimestamp);
+    console.log(`🌐 Fetching API Data from ${new Date(startTimestamp).toLocaleString()} to ${new Date(endTimestamp).toLocaleString()}...`);
 
-        // إضافة الدفعة في بداية المصفوفة لأننا نتحرك من الحاضر للماضي
-        allCandles = [...filteredBatch, ...allCandles];
+    let currentEnd = endTimestamp;
+    let allCandles: any[] = [];
+    let lastFetchedTime = 0; // عشان نكشف الدوامات الزمنية
 
-        // بما أننا لم نعكس المصفوفة، العنصر الأول [0] هو الأقدم فعلياً
-        const oldestCandleTime = batch[0].time;
+    while (currentEnd > startTimestamp) {
+        await delay(200); // تأخير آمن لتجنب حظر الـ IP
 
-        if (oldestCandleTime <= startTimestamp) {
+        // 🟢 استدعاء الـ API (استخدم الدالة الخاصة بك هنا)
+        const batch = await getCandlesBatch(interval, currentEnd);
+
+        if (!batch || batch.length === 0) {
+            console.log("⚠️ API returned empty data. Stopping.");
             break;
         }
 
-        // نحدث وقت النهاية للدفعة القادمة
-        currentEndTime = oldestCandleTime - 1;
+        // بما أن المصفوفة تأتي مرتبة، أقدم شمعة هي أول عنصر
+        const oldestCandleInBatch = batch[0];
         
-        console.log(`Fetched ${filteredBatch.length} candles. Oldest time in batch: ${new Date(oldestCandleTime).toISOString()} - Total: ${allCandles.length}`);
-        console.log("💾 Data collection complete, saving to file...");
-        await fs.writeFile(filePath, JSON.stringify(allCandles, null, 2));
+        // 🛡️ حماية من الدوامة الزمنية (إذا المنصة علقت على نفس الدفعة)
+        if (oldestCandleInBatch.time === lastFetchedTime) {
+            console.log("⚠️ Reached Genesis Block or API is looping. Stopping.");
+            break;
+        }
+        lastFetchedTime = oldestCandleInBatch.time;
+
+        // فلترة الشموع لضمان عدم أخذ بيانات أقدم من المطلوبة أو أحدث من المطلوبة
+        const validCandles = batch.filter((candle: any) => 
+            candle.time >= startTimestamp && candle.time <= endTimestamp
+        );
+
+        // دمج الشموع الجديدة في بداية المصفوفة (لأننا نرجع للخلف)
+        allCandles = [...validCandles, ...allCandles];
+
+        console.log(`📥 Fetched ${validCandles.length} valid candles. Oldest time: ${new Date(oldestCandleInBatch.time).toISOString()} | Total: ${allCandles.length}`);
+
+        // إذا كانت أقدم شمعة سحبناها أقدم من أو تساوي وقت البداية المطلوب، كذا خلصنا
+        if (oldestCandleInBatch.time <= startTimestamp) {
+            console.log("🎯 Successfully reached the target start date.");
+            break;
+        }
+
+        // تحديث وقت النهاية للدفعة القادمة ليكون قبل أقدم شمعة بـ 1 ملي ثانية
+        currentEnd = oldestCandleInBatch.time - 1;
     }
 
-    
+    // 2. معالجة وتخزين البيانات النهائية
+    if (allCandles.length > 0) {
+        // خطوة إضافية لضمان عدم وجود شموع مكررة (تنظيف البيانات)
+        const uniqueCandles = Array.from(new Map(allCandles.map(c => [c.time, c])).values());
+        
+        // ترتيب تصاعدي (من الماضي للحاضر) تحسباً لأي لخبطة في الـ API
+        uniqueCandles.sort((a, b) => a.time - b.time);
 
-    return allCandles;
+        console.log(`💾 Saving ${uniqueCandles.length} final unique candles to disk...`);
+        await fs.writeFile(filePath, JSON.stringify(uniqueCandles, null, 2));
+        console.log("✅ Process completed successfully!");
+        
+        return uniqueCandles;
+    } else {
+        console.log("❌ No candles were fetched within this time range. Double check the exchange API capabilities.");
+        return [];
+    }
 }
