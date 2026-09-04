@@ -37,6 +37,6 @@ Before running the project, ensure you have the following installed:
    cd tradingBot_v8
 
 ## Run
-1- set up your configuration from config:IConfig 
-2- npm i
-3- ts-node index.ts
+* set up your configuration from config:IConfig 
+* npm i
+* ts-node index.ts
