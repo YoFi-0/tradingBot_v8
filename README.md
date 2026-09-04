@@ -1,16 +1,16 @@
-# tradingBot_v8 🤖📈
+# tradingBot_v8
 
 An automated **trading bot** designed to analyze markets, generate strategic signals, and execute trades autonomously on your behalf.
 
 ---
 
-## 🎯 Goal & Vision
+## Goal & Vision
 
 The core objective of this project is to develop a fully autonomous AI trading bot capable of making data-driven market decisions, managing risk, and trading seamlessly without human intervention.
 
 ---
 
-## 🚦 Project Status
+## Project Status
 
 * 🔴 **Live Trading Algorithm:** **Currently Inactive / Non-Functional**  
   *The live trade execution algorithm is under active development and debugging. It is not currently ready for live execution.*
